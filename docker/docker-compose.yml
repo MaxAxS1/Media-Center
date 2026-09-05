@@ -1,0 +1,145 @@
+# ============================================================
+# 🎬 Media Center — Docker Compose
+# ============================================================
+# Antes de usar:
+#   1. Editá el archivo .env con las rutas de tu servidor
+#   2. Ejecutá: docker compose up -d
+# ============================================================
+
+networks:
+  media-net:
+    driver: bridge
+
+services:
+  # ----------------------------------------------------------
+  # Prowlarr — Gestor centralizado de indexadores torrent
+  # Puerto: 9696
+  # ----------------------------------------------------------
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_PATH}/prowlarr:/config
+    ports:
+      - "9696:9696"
+    restart: unless-stopped
+    networks:
+      - media-net
+
+  # ----------------------------------------------------------
+  # Radarr — Automatización de películas
+  # Puerto: 7878
+  # ----------------------------------------------------------
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_PATH}/radarr:/config
+      - ${DATA_PATH}:/data
+    ports:
+      - "7878:7878"
+    restart: unless-stopped
+    networks:
+      - media-net
+    depends_on:
+      - prowlarr
+
+  # ----------------------------------------------------------
+  # Sonarr — Automatización de series
+  # Puerto: 8989
+  # ----------------------------------------------------------
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_PATH}/sonarr:/config
+      - ${DATA_PATH}:/data
+    ports:
+      - "8989:8989"
+    restart: unless-stopped
+    networks:
+      - media-net
+    depends_on:
+      - prowlarr
+
+  # ----------------------------------------------------------
+  # qBittorrent — Cliente de descargas torrent
+  # Puerto Web UI: 8080
+  # Puerto Torrent: 6881
+  # ----------------------------------------------------------
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - ${CONFIG_PATH}/qbittorrent:/config
+      - ${DATA_PATH}:/data
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+    networks:
+      - media-net
+
+  # ----------------------------------------------------------
+  # Bazarr — Subtítulos automáticos
+  # Puerto: 6767
+  # Configurado para Español Latino
+  # ----------------------------------------------------------
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_PATH}/bazarr:/config
+      - ${DATA_PATH}/media:/data/media
+    ports:
+      - "6767:6767"
+    restart: unless-stopped
+    networks:
+      - media-net
+    depends_on:
+      - sonarr
+      - radarr
+
+  # ----------------------------------------------------------
+  # Seerr — Descubrimiento y solicitudes (sucesor de Overseerr)
+  # Puerto: 5055
+  # ----------------------------------------------------------
+  seerr:
+    image: sctx/overseerr:latest
+    container_name: seerr
+    environment:
+      - TZ=${TZ}
+      - LOG_LEVEL=debug
+    volumes:
+      - ${CONFIG_PATH}/seerr:/app/config
+    ports:
+      - "5055:5055"
+    restart: unless-stopped
+    networks:
+      - media-net
+    depends_on:
+      - sonarr
+      - radarr

@@ -1,0 +1,35 @@
+# Entornos y claves sensibles
+.env
+.env.local
+.env.*.local
+
+# Dependencias de Node
+node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Expo y compilados
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+*.tsbuildinfo
+
+# Build nativo
+/ios/
+/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Carpetas de datos de Docker generadas en ejecución
+torrents/
+media/
+config/
+
+# Sistema
+.DS_Store
+Thumbs.db
