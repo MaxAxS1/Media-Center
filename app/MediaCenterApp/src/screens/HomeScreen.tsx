@@ -1,18 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ImageBackground, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  ImageBackground,
+  Pressable,
+} from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../config/theme';
 import { MediaRow } from '../components/MediaRow';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { TMDBService } from '../services/tmdb';
+import { getSettings } from '../services/apiClient';
 import { MediaItem } from '../types';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+  const [missingApiKey, setMissingApiKey] = useState(false);
+
   const [heroItem, setHeroItem] = useState<MediaItem | null>(null);
   const [trending, setTrending] = useState<MediaItem[]>([]);
   const [popularTV, setPopularTV] = useState<MediaItem[]>([]);
@@ -21,6 +32,15 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
+      const settings = await getSettings();
+      if (!settings.tmdbApiKey) {
+        setMissingApiKey(true);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      setMissingApiKey(false);
       const [trendingData, tvData, moviesData, topRatedData] = await Promise.all([
         TMDBService.getTrending(),
         TMDBService.getPopularTV(),
@@ -32,21 +52,28 @@ export default function HomeScreen() {
       setPopularTV(tvData);
       setPopularMovies(moviesData);
       setTopRated(topRatedData);
-      
+
       if (trendingData.length > 0) {
         setHeroItem(trendingData[0]);
       }
-    } catch (error) {
-      console.error('Error loading home data', error);
+    } catch (error: any) {
+      if (error?.message?.includes('TMDB API Key is missing')) {
+        setMissingApiKey(true);
+      } else {
+        console.warn('Error loading home data:', error?.message);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Reload data whenever screen is focused (e.g. returning from Settings)
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -54,19 +81,48 @@ export default function HomeScreen() {
   };
 
   const handleMediaPress = (item: MediaItem) => {
-    router.push({ pathname: '/detail', params: { id: item.id, mediaType: item.media_type || 'movie' } });
+    router.push({
+      pathname: '/detail',
+      params: { id: item.id, mediaType: item.media_type || 'movie' },
+    });
   };
+
+  if (missingApiKey) {
+    return (
+      <View style={[styles.container, styles.emptyContainer]}>
+        <Ionicons name="film-outline" size={72} color={theme.colors.primary} />
+        <Text style={styles.emptyTitle}>Falta configurar TMDB API Key</Text>
+        <Text style={styles.emptySubtitle}>
+          Para ver las tendencias, series y películas, ingresa tu clave gratuita de TMDB.
+        </Text>
+        <Pressable
+          style={styles.goToSettingsButton}
+          onPress={() => router.push('/(tabs)/settings')}
+        >
+          <Text style={styles.goToSettingsText}>Ir a Ajustes</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
       style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={theme.colors.primary}
+        />
+      }
     >
       {loading ? (
         <LoadingSkeleton variant="detail" height={450} />
       ) : heroItem ? (
         <ImageBackground
-          source={{ uri: `https://image.tmdb.org/t/p/original${heroItem.backdrop_path}` }}
+          source={{
+            uri: `https://image.tmdb.org/t/p/original${heroItem.backdrop_path}`,
+          }}
           style={styles.heroContainer}
         >
           <LinearGradient
@@ -80,10 +136,16 @@ export default function HomeScreen() {
               {heroItem.overview}
             </Text>
             <View style={styles.heroActions}>
-              <Pressable style={styles.primaryButton} onPress={() => handleMediaPress(heroItem)}>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={() => handleMediaPress(heroItem)}
+              >
                 <Text style={styles.primaryButtonText}>Solicitar</Text>
               </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => handleMediaPress(heroItem)}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => handleMediaPress(heroItem)}
+              >
                 <Text style={styles.secondaryButtonText}>Ver Detalles</Text>
               </Pressable>
             </View>
@@ -125,6 +187,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  emptyContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.xl,
+  },
+  emptyTitle: {
+    color: theme.colors.text.primary,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    color: theme.colors.text.secondary,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: theme.spacing.xl,
+  },
+  goToSettingsButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.xl,
+    borderRadius: theme.borderRadius.md,
+  },
+  goToSettingsText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   heroContainer: {
     height: 450,
