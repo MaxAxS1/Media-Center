@@ -107,4 +107,31 @@ export class LocalStorageService {
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(remainingQueue));
     return { synced: syncedCount, remaining: remainingQueue.length };
   }
+
+  // ================= NOTIFICACIONES =================
+  static async isPushEnabled(): Promise<boolean> {
+    try {
+      const val = await AsyncStorage.getItem('PUSH_ENABLED');
+      return val !== 'false';
+    } catch {
+      return true;
+    }
+  }
+
+  static async getLastNotifiedId(): Promise<number | null> {
+    try {
+      const val = await AsyncStorage.getItem('LAST_NOTIFIED_ID');
+      return val ? parseInt(val, 10) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  static async setLastNotifiedId(id: number): Promise<void> {
+    try {
+      await AsyncStorage.setItem('LAST_NOTIFIED_ID', id.toString());
+    } catch (error) {
+      console.error(error);
+    }
+  }
 }

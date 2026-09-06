@@ -15,6 +15,7 @@ import { theme } from '../config/theme';
 import { getSettings } from '../services/apiClient';
 import { AppSettings } from '../types';
 import { SERVER_CONFIG, TMDB_CONFIG } from '../config/api';
+import * as Notifications from 'expo-notifications';
 
 export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,7 @@ export default function SettingsScreen() {
 
   const [pushEnabled, setPushEnabled] = useState(true);
   const [preferredQuality, setPreferredQuality] = useState('1080p');
+  const [pushToken, setPushToken] = useState<string | null>(null);
 
   useEffect(() => {
     loadCurrentSettings();
@@ -49,6 +51,15 @@ export default function SettingsScreen() {
       if (savedPush !== null) setPushEnabled(savedPush === 'true');
       const savedQuality = await AsyncStorage.getItem('PREFERRED_QUALITY');
       if (savedQuality) setPreferredQuality(savedQuality);
+      
+      try {
+        const token = await Notifications.getExpoPushTokenAsync({
+          projectId: 'dc466c00-cdbb-48ca-bacc-66beb8023943'
+        });
+        setPushToken(token.data);
+      } catch (e) {
+        // Ignorar si falla en simulador
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -127,6 +138,17 @@ export default function SettingsScreen() {
             trackColor={{ true: theme.colors.primary, false: theme.colors.surface }}
           />
         </View>
+        {pushToken && (
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Expo Push Token (Cópialo en Seerr)</Text>
+            <TextInput
+              style={styles.input}
+              value={pushToken}
+              editable={false}
+              selectTextOnFocus
+            />
+          </View>
+        )}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Calidad Preferida</Text>
           <View style={styles.qualitySelector}>
