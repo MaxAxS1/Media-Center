@@ -16,7 +16,8 @@ import { MediaRow } from '../components/MediaRow';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { TMDBService } from '../services/tmdb';
 import { getSettings } from '../services/apiClient';
-import { MediaItem } from '../types';
+import { LocalStorageService } from '../services/localStorage';
+import { MediaItem, FavoriteItem } from '../types';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -29,6 +30,8 @@ export default function HomeScreen() {
   const [popularTV, setPopularTV] = useState<MediaItem[]>([]);
   const [popularMovies, setPopularMovies] = useState<MediaItem[]>([]);
   const [topRated, setTopRated] = useState<MediaItem[]>([]);
+  const [personalizedRecs, setPersonalizedRecs] = useState<{ title: string; items: MediaItem[] }[]>([]);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
 
   const loadData = async () => {
     try {
@@ -41,20 +44,45 @@ export default function HomeScreen() {
       }
 
       setMissingApiKey(false);
-      const [trendingData, tvData, moviesData, topRatedData] = await Promise.all([
+
+      // Cargar listas públicas de TMDB (100% online en la nube, no dependen de tu servidor)
+      const [trendingData, tvData, moviesData, topRatedData, favs] = await Promise.all([
         TMDBService.getTrending(),
         TMDBService.getPopularTV(),
         TMDBService.getPopularMovies(),
         TMDBService.getTopRated(),
+        LocalStorageService.getFavorites(),
       ]);
 
       setTrending(trendingData);
       setPopularTV(tvData);
       setPopularMovies(moviesData);
       setTopRated(topRatedData);
+      setFavorites(favs);
 
       if (trendingData.length > 0) {
         setHeroItem(trendingData[0]);
+      }
+
+      // Generar recomendaciones personalizadas basadas en tus favoritos guardados en el celular
+      if (favs.length > 0) {
+        const topFavs = favs.slice(0, 2); // Tomamos los 2 favoritos más recientes
+        const recsPromises = topFavs.map(async (fav) => {
+          try {
+            const recItems = await TMDBService.getRecommendations(fav.media_type, fav.id);
+            return {
+              title: `✨ Porque te gustó "${fav.title}"`,
+              items: recItems,
+            };
+          } catch (e) {
+            return null;
+          }
+        });
+
+        const recsResults = await Promise.all(recsPromises);
+        setPersonalizedRecs(recsResults.filter((r): r is { title: string; items: MediaItem[] } => r !== null && r.items.length > 0));
+      } else {
+        setPersonalizedRecs([]);
       }
     } catch (error: any) {
       if (error?.message?.includes('TMDB API Key is missing')) {
@@ -68,7 +96,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Reload data whenever screen is focused (e.g. returning from Settings)
+  // Reload data whenever screen is focused (e.g. returning from Settings or Detail)
   useFocusEffect(
     useCallback(() => {
       loadData();
@@ -154,6 +182,36 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={styles.content}>
+        {/* Recomendaciones personalizadas independientes del servidor */}
+        {personalizedRecs.map((rec, index) => (
+          <MediaRow
+            key={index}
+            title={rec.title}
+            data={rec.items}
+            isLoading={loading}
+            onItemPress={handleMediaPress}
+          />
+        ))}
+
+        {/* Fila de Favoritos del usuario si existen */}
+        {favorites.length > 0 && (
+          <MediaRow
+            title="❤️ Mi Lista de Favoritos"
+            data={favorites.map((f) => ({
+              id: f.id,
+              title: f.title,
+              poster_path: f.poster_path,
+              backdrop_path: f.backdrop_path,
+              overview: '',
+              vote_average: f.vote_average,
+              genre_ids: [],
+              media_type: f.media_type,
+            }))}
+            isLoading={loading}
+            onItemPress={handleMediaPress}
+          />
+        )}
+
         <MediaRow
           title="🔥 Tendencias Hoy"
           data={trending}

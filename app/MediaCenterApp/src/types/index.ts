@@ -108,4 +108,26 @@ export interface AppSettings {
   radarrApiKey: string;
   plexUrl: string;
   plexToken: string;
+  serverMacAddress?: string;
 }
+
+export interface FavoriteItem {
+  id: number;
+  title: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  media_type: 'movie' | 'tv';
+  vote_average: number;
+  addedAt: number;
+}
+
+export interface OfflineQueueItem {
+  id: number;
+  tmdbId: number;
+  title: string;
+  mediaType: 'movie' | 'tv';
+  poster_path: string | null;
+  addedAt: number;
+  status: 'queued' | 'syncing' | 'failed';
+}
+

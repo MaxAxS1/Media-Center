@@ -7,25 +7,33 @@ import {
   Pressable,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { theme } from '../config/theme';
 import { SeerrService } from '../services/seerr';
-import { SeerrMediaRequest } from '../types';
+import { LocalStorageService } from '../services/localStorage';
+import { SeerrMediaRequest, OfflineQueueItem } from '../types';
 
 export default function DownloadsScreen() {
-  const [activeTab, setActiveTab] = useState<'actives' | 'history'>('actives');
+  const [activeTab, setActiveTab] = useState<'actives' | 'offline_queue' | 'history'>('actives');
   const [requests, setRequests] = useState<SeerrMediaRequest[]>([]);
+  const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
-  const loadRequests = async () => {
+  const loadData = async () => {
     try {
-      const data = await SeerrService.getRequests();
-      if (data?.results) {
-        setRequests(data.results);
+      const [seerrData, queueData] = await Promise.all([
+        SeerrService.getRequests().catch(() => ({ results: [] })),
+        LocalStorageService.getQueue(),
+      ]);
+
+      if (seerrData?.results) {
+        setRequests(seerrData.results);
       }
+      setOfflineQueue(queueData);
     } catch (e) {
-      // Fallback if Seerr not configured or error
       setRequests([]);
     } finally {
       setLoading(false);
@@ -34,22 +42,33 @@ export default function DownloadsScreen() {
   };
 
   useEffect(() => {
-    loadRequests();
+    loadData();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadRequests();
+    loadData();
   };
 
-  // Status mapping:
-  // 1: Pending, 2: Approved / Processing, 3: Declined, 4: Available
-  const filtered = requests.filter((r) => {
-    if (activeTab === 'actives') {
-      return r.status === 1 || r.status === 2;
+  const syncQueue = async () => {
+    if (offlineQueue.length === 0) return;
+    setSyncing(true);
+    const res = await LocalStorageService.syncPendingQueue();
+    setSyncing(false);
+    await loadData();
+
+    if (res.synced > 0) {
+      Alert.alert(
+        '🚀 Sincronización exitosa',
+        `Se enviaron ${res.synced} solicitudes pendientes a tu servidor.`
+      );
+    } else {
+      Alert.alert(
+        'Servidor aún inaccesible',
+        'Tu servidor sigue apagado o no responde. Las solicitudes se mantienen seguras en la cola.'
+      );
     }
-    return r.status === 3 || r.status === 4;
-  });
+  };
 
   const getStatusLabel = (status: number) => {
     switch (status) {
@@ -66,6 +85,9 @@ export default function DownloadsScreen() {
     }
   };
 
+  const activeRequests = requests.filter((r) => r.status === 1 || r.status === 2);
+  const historyRequests = requests.filter((r) => r.status === 3 || r.status === 4);
+
   return (
     <View style={styles.container}>
       <View style={styles.tabs}>
@@ -76,9 +98,21 @@ export default function DownloadsScreen() {
           <Text
             style={[styles.tabText, activeTab === 'actives' && styles.activeTabText]}
           >
-            Activas ({requests.filter((r) => r.status === 1 || r.status === 2).length})
+            Activas ({activeRequests.length})
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[styles.tab, activeTab === 'offline_queue' && styles.activeTab]}
+          onPress={() => setActiveTab('offline_queue')}
+        >
+          <Text
+            style={[styles.tabText, activeTab === 'offline_queue' && styles.activeTabText]}
+          >
+            Cola Offline ({offlineQueue.length})
+          </Text>
+        </Pressable>
+
         <Pressable
           style={[styles.tab, activeTab === 'history' && styles.activeTab]}
           onPress={() => setActiveTab('history')}
@@ -86,18 +120,77 @@ export default function DownloadsScreen() {
           <Text
             style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}
           >
-            Historial ({requests.filter((r) => r.status === 3 || r.status === 4).length})
+            Historial ({historyRequests.length})
           </Text>
         </Pressable>
       </View>
+
+      {/* Botón de sincronizar cuando estamos en la pestaña Cola Offline */}
+      {activeTab === 'offline_queue' && offlineQueue.length > 0 && (
+        <Pressable
+          style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+          onPress={syncQueue}
+          disabled={syncing}
+        >
+          <Text style={styles.syncButtonText}>
+            {syncing ? 'Conectando con el servidor...' : '⚡ Sincronizar Cola con Servidor'}
+          </Text>
+        </Pressable>
+      )}
 
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
+      ) : activeTab === 'offline_queue' ? (
+        <FlatList
+          data={offlineQueue}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <View style={styles.info}>
+                <Text style={styles.title}>
+                  {item.mediaType === 'movie' ? '🎬' : '📺'} {item.title}
+                </Text>
+                <Text style={[styles.meta, { color: theme.colors.warning }]}>
+                  ● Guardado localmente (Servidor en reposo)
+                </Text>
+                <Text style={styles.requestedBy}>
+                  Fecha: {new Date(item.addedAt).toLocaleString()}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.deleteButton}
+                onPress={async () => {
+                  await LocalStorageService.removeFromQueue(item.tmdbId);
+                  await loadData();
+                }}
+              >
+                <Text style={styles.deleteButtonText}>✕</Text>
+              </Pressable>
+            </View>
+          )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>Cola offline vacía</Text>
+              <Text style={styles.emptyText}>
+                Si pides una película o serie mientras tu servidor está apagado, se guardará
+                aquí para sincronizarse apenas vuelvas a encenderlo.
+              </Text>
+            </View>
+          }
+        />
       ) : (
         <FlatList
-          data={filtered}
+          data={activeTab === 'actives' ? activeRequests : historyRequests}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -133,12 +226,13 @@ export default function DownloadsScreen() {
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>
                 {activeTab === 'actives'
-                  ? 'No hay descargas activas'
-                  : 'No hay historial de solicitudes'}
+                  ? 'No hay descargas activas en el servidor'
+                  : 'No hay historial en el servidor'}
               </Text>
               <Text style={styles.emptyText}>
-                Cuando solicites una película o serie desde Inicio o Búsqueda, aparecerá
-                aquí para monitorearla.
+                {activeTab === 'actives'
+                  ? 'Si el servidor está apagado, revisa la pestaña "Cola Offline".'
+                  : 'Las descargas completadas aparecerán aquí.'}
               </Text>
             </View>
           }
@@ -161,7 +255,7 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
     paddingTop: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
     backgroundColor: theme.colors.surface,
   },
   tab: {
@@ -176,11 +270,26 @@ const styles = StyleSheet.create({
   },
   tabText: {
     color: theme.colors.text.secondary,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   activeTabText: {
     color: theme.colors.text.primary,
+  },
+  syncButton: {
+    margin: theme.spacing.md,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.sm + 4,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+  },
+  syncButtonDisabled: {
+    opacity: 0.6,
+  },
+  syncButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   list: {
     padding: theme.spacing.md,
@@ -192,9 +301,20 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     borderWidth: 1,
     borderColor: '#2A2A2A',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   info: {
     flex: 1,
+  },
+  deleteButton: {
+    padding: theme.spacing.sm,
+    marginLeft: theme.spacing.sm,
+  },
+  deleteButtonText: {
+    color: theme.colors.text.secondary,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   title: {
     color: theme.colors.text.primary,

@@ -11,9 +11,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../config/theme';
 import { TMDBService } from '../services/tmdb';
 import { SeerrService } from '../services/seerr';
+import { LocalStorageService } from '../services/localStorage';
 import { MediaRow } from '../components/MediaRow';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { MediaItem } from '../types';
@@ -23,22 +25,31 @@ export default function DetailScreen() {
   const [details, setDetails] = useState<any>(null);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [requestStatus, setRequestStatus] = useState<'none' | 'pending' | 'available' | 'downloading'>('none');
+  const [requestStatus, setRequestStatus] = useState<'none' | 'pending' | 'available' | 'downloading' | 'queued'>('none');
+  const [isFavorite, setIsFavorite] = useState(false);
   const [requesting, setRequesting] = useState(false);
+
+  const mt = (mediaType as 'movie' | 'tv') || 'movie';
+  const numId = Number(id);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const mt = (mediaType as 'movie' | 'tv') || 'movie';
-        const numId = Number(id);
-        const [data, similarData] = await Promise.all([
+        const [data, similarData, favStatus, queuedStatus] = await Promise.all([
           TMDBService.getDetails(mt, numId),
           TMDBService.getSimilar(mt, numId),
+          LocalStorageService.isFavorite(numId),
+          LocalStorageService.isQueued(numId),
         ]);
         setDetails(data);
         setSimilar(similarData);
+        setIsFavorite(favStatus);
 
-        // Check Seerr media availability if connected
+        if (queuedStatus) {
+          setRequestStatus('queued');
+        }
+
+        // Consultar a Seerr si el servidor está online
         try {
           const statusRes = await SeerrService.getMediaStatus(numId, mt);
           if (statusRes?.status === 5) {
@@ -49,8 +60,8 @@ export default function DetailScreen() {
             setRequestStatus('pending');
           }
         } catch (_) {
-          // If Seerr is unreachable or not configured yet, fallback to none
-          setRequestStatus('none');
+          // Si Seerr no responde (server apagado), mantenemos queued o none
+          if (!queuedStatus) setRequestStatus('none');
         }
       } catch (error) {
         console.error('Error loading details:', error);
@@ -61,10 +72,32 @@ export default function DetailScreen() {
     fetchData();
   }, [id, mediaType]);
 
+  const toggleFavorite = async () => {
+    if (!details) return;
+    const title = details.title || details.name || 'Sin título';
+    const newStatus = await LocalStorageService.toggleFavorite({
+      id: numId,
+      title,
+      poster_path: details.poster_path,
+      backdrop_path: details.backdrop_path,
+      media_type: mt,
+      vote_average: details.vote_average || 0,
+      addedAt: Date.now(),
+    });
+    setIsFavorite(newStatus);
+    Alert.alert(
+      newStatus ? '❤️ Agregado a Favoritos' : 'Eliminado de Favoritos',
+      newStatus
+        ? 'Tus recomendaciones en la pantalla de inicio ahora tendrán en cuenta este título.'
+        : ''
+    );
+  };
+
   const handleRequest = async () => {
-    const mt = (mediaType as 'movie' | 'tv') || 'movie';
-    const numId = Number(id);
+    if (!details) return;
+    const title = details.title || details.name || 'Sin título';
     setRequesting(true);
+
     try {
       if (mt === 'movie') {
         await SeerrService.requestMovie(numId);
@@ -72,11 +105,19 @@ export default function DetailScreen() {
         await SeerrService.requestTV(numId);
       }
       setRequestStatus('pending');
-      Alert.alert('¡Solicitud enviada!', 'Se enviará a Radarr/Sonarr para descargar en la mayor calidad.');
+      Alert.alert('¡Solicitud enviada!', 'El servidor ya comenzó a procesar la descarga.');
     } catch (err: any) {
+      // Si el servidor está apagado o fuera de red, lo guardamos en la cola local
+      await LocalStorageService.addToQueue({
+        tmdbId: numId,
+        title,
+        mediaType: mt,
+        poster_path: details.poster_path,
+      });
+      setRequestStatus('queued');
       Alert.alert(
-        'Aviso de Solicitud',
-        'No se pudo conectar a Seerr. Revisa tu IP y API Key en la pestaña Ajustes.'
+        '💾 Servidor apagado / no alcanzable',
+        `Se guardó "${title}" en la Cola de Descargas de tu celular. Se enviará automáticamente cuando el servidor se encienda.`
       );
     } finally {
       setRequesting(false);
@@ -105,14 +146,16 @@ export default function DetailScreen() {
   }
 
   const getStatusButtonText = () => {
-    if (requesting) return 'Enviando...';
+    if (requesting) return 'Procesando...';
     switch (requestStatus) {
       case 'available':
         return '✓ Disponible en Biblioteca';
       case 'downloading':
         return 'Descargando...';
       case 'pending':
-        return '⏳ Pendiente de Aprobación';
+        return '⏳ Pendiente en Servidor';
+      case 'queued':
+        return '🕒 En Cola Offline (Pendiente)';
       default:
         return '⬇ Solicitar Descarga';
     }
@@ -164,6 +207,20 @@ export default function DetailScreen() {
           ) : (
             <Text style={styles.buttonText}>{getStatusButtonText()}</Text>
           )}
+        </Pressable>
+
+        <Pressable
+          style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
+          onPress={toggleFavorite}
+        >
+          <Ionicons
+            name={isFavorite ? 'heart' : 'heart-outline'}
+            size={22}
+            color={isFavorite ? theme.colors.primary : '#FFF'}
+          />
+          <Text style={[styles.favoriteText, isFavorite && styles.favoriteTextActive]}>
+            {isFavorite ? 'En Favoritos' : 'Favorito'}
+          </Text>
         </Pressable>
       </View>
 
@@ -263,10 +320,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   actions: {
+    flexDirection: 'row',
     paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.md,
     marginBottom: theme.spacing.lg,
   },
   primaryButton: {
+    flex: 2,
     backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.md,
     borderRadius: theme.borderRadius.sm,
@@ -279,7 +339,32 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  favoriteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: '#333',
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  favoriteButtonActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(229, 9, 20, 0.1)',
+  },
+  favoriteText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  favoriteTextActive: {
+    color: theme.colors.primary,
     fontWeight: 'bold',
   },
   section: {
