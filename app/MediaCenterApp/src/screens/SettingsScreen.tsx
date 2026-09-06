@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../config/theme';
 import { getSettings } from '../services/apiClient';
 import { AppSettings } from '../types';
+import { SERVER_CONFIG, TMDB_CONFIG } from '../config/api';
 
 export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
@@ -73,24 +74,27 @@ export default function SettingsScreen() {
     setTestingService(type);
     try {
       if (type === 'tmdb') {
-        if (!settings.tmdbApiKey) throw new Error('Ingresa la TMDB API Key');
+        const apiKey = TMDB_CONFIG.API_KEY;
+        if (!apiKey || apiKey.includes('PEGAR_AQUI')) throw new Error('Falta la TMDB API Key en el código');
         const res = await fetch(
-          `https://api.themoviedb.org/3/authentication?api_key=${settings.tmdbApiKey}`
+          `https://api.themoviedb.org/3/authentication?api_key=${apiKey}`
         );
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
         Alert.alert('Conexión Exitosa', 'TMDB respondió correctamente.');
       } else if (type === 'seerr') {
-        if (!settings.seerrUrl || !settings.seerrApiKey)
-          throw new Error('Completa la URL y API Key de Seerr');
+        const apiKey = SERVER_CONFIG.SEERR_API_KEY;
+        if (!settings.seerrUrl || !apiKey || apiKey.includes('PEGAR_AQUI'))
+          throw new Error('Completa la URL y asegúrate de tener la API Key en el código');
         const res = await fetch(`${settings.seerrUrl}/api/v1/status`, {
-          headers: { 'X-Api-Key': settings.seerrApiKey },
+          headers: { 'X-Api-Key': apiKey },
         });
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
         Alert.alert('Conexión Exitosa', 'Seerr respondió correctamente.');
       } else if (type === 'plex') {
         if (!settings.plexUrl) throw new Error('Completa la URL de Plex');
-        const url = settings.plexToken
-          ? `${settings.plexUrl}/identity?X-Plex-Token=${settings.plexToken}`
+        const token = SERVER_CONFIG.PLEX_TOKEN;
+        const url = token && !token.includes('PEGAR_AQUI')
+          ? `${settings.plexUrl}/identity?X-Plex-Token=${token}`
           : `${settings.plexUrl}/identity`;
         const res = await fetch(url, { headers: { Accept: 'application/json' } });
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
@@ -162,17 +166,6 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>TMDB API Key</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ej: abc123xyz..."
-            placeholderTextColor={theme.colors.text.secondary}
-            value={settings.tmdbApiKey}
-            onChangeText={(t) => setSettings({ ...settings, tmdbApiKey: t })}
-            autoCapitalize="none"
-          />
-        </View>
       </View>
 
       <View style={styles.section}>
@@ -199,18 +192,6 @@ export default function SettingsScreen() {
             autoCapitalize="none"
           />
         </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>API Key de Seerr</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Token API de Seerr"
-            placeholderTextColor={theme.colors.text.secondary}
-            value={settings.seerrApiKey}
-            onChangeText={(t) => setSettings({ ...settings, seerrApiKey: t })}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-        </View>
       </View>
 
       <View style={styles.section}>
@@ -234,18 +215,6 @@ export default function SettingsScreen() {
             placeholderTextColor={theme.colors.text.secondary}
             value={settings.plexUrl}
             onChangeText={(t) => setSettings({ ...settings, plexUrl: t })}
-            autoCapitalize="none"
-          />
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Token de Plex (Opcional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Plex-Token"
-            placeholderTextColor={theme.colors.text.secondary}
-            value={settings.plexToken}
-            onChangeText={(t) => setSettings({ ...settings, plexToken: t })}
-            secureTextEntry
             autoCapitalize="none"
           />
         </View>
