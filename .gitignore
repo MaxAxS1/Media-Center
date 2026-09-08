@@ -28,7 +28,7 @@ expo-env.d.ts
 # Carpetas de datos de Docker generadas en ejecución
 torrents/
 media/
-config/
+docker/config/
 
 # Sistema
 .DS_Store
