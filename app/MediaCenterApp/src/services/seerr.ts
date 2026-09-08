@@ -43,12 +43,16 @@ export class SeerrService {
     });
   }
 
-  static async requestTV(tmdbId: number) {
+  static async requestTV(tmdbId: number, seasons?: number[]) {
     return fetchSeerr<any>('/request', {
       method: 'POST',
       body: JSON.stringify({
         mediaId: tmdbId,
         mediaType: 'tv',
+        // Si no se especifican temporadas, solicita todas (Seerr maneja esto automáticamente)
+        ...(seasons && seasons.length > 0
+          ? { seasons }
+          : {}),
       }),
     });
   }

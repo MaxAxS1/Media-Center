@@ -100,6 +100,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadData();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
 

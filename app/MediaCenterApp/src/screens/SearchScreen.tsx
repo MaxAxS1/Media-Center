@@ -21,6 +21,7 @@ export default function SearchScreen() {
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -31,8 +32,9 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (debouncedQuery.trim().length > 0) {
+      setSelectedGenre(null);
       performSearch(debouncedQuery);
-    } else {
+    } else if (!selectedGenre) {
       setResults([]);
     }
   }, [debouncedQuery]);
@@ -42,6 +44,20 @@ export default function SearchScreen() {
     try {
       const data = await TMDBService.search(text);
       setResults(data.results);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenrePress = async (genreId: number) => {
+    setSelectedGenre(genreId);
+    setQuery('');
+    setLoading(true);
+    try {
+      const data = await TMDBService.discoverByGenre('movie', genreId);
+      setResults(data);
     } catch (error) {
       console.error(error);
     } finally {
@@ -79,7 +95,11 @@ export default function SearchScreen() {
           <Text style={styles.sectionTitle}>Explorar Géneros</Text>
           <View style={styles.genresGrid}>
             {GENRES.map(genre => (
-              <Pressable key={genre.id} style={styles.genreCard}>
+              <Pressable
+                key={genre.id}
+                style={[styles.genreCard, selectedGenre === genre.id && styles.genreCardActive]}
+                onPress={() => handleGenrePress(genre.id)}
+              >
                 <Text style={styles.genreIcon}>{genre.icon}</Text>
                 <Text style={styles.genreName}>{genre.name}</Text>
               </Pressable>
@@ -151,6 +171,12 @@ const styles = StyleSheet.create({
     width: '47%',
     alignItems: 'center',
     flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  genreCardActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
   },
   genreIcon: {
     fontSize: 24,

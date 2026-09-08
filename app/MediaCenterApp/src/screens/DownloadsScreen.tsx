@@ -206,8 +206,10 @@ export default function DownloadsScreen() {
               <View style={styles.card}>
                 <View style={styles.info}>
                   <Text style={styles.title}>
-                    {item.media.mediaType === 'movie' ? '🎬 Película' : '📺 Serie'} #
-                    {item.media.tmdbId}
+                    {item.media.mediaType === 'movie' ? '🎬' : '📺'}{' '}
+                    {(item as any).media?.title ||
+                      (item as any).media?.name ||
+                      `${item.media.mediaType === 'movie' ? 'Película' : 'Serie'} TMDB #${item.media.tmdbId}`}
                   </Text>
                   <Text style={[styles.meta, { color: statusInfo.color }]}>
                     ● {statusInfo.label}

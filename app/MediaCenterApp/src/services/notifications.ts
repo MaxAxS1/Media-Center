@@ -14,7 +14,9 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-  }),
+    shouldShowBanner: true,
+    shouldShowList: true,
+  } as any),
 });
 
 export async function registerForPushNotificationsAsync(): Promise<string | undefined> {
@@ -72,7 +74,7 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: '¡Nueva recomendación para ti! 🍿',
-            body: `Porque te gustó "${fav.title || fav.name}", te sugerimos ver "${topRec.title || topRec.name}".`,
+            body: `Porque te gustó "${fav.title}", te sugerimos ver "${topRec.title || topRec.name}".`,
             data: { mediaId: topRec.id, mediaType: topRec.media_type },
           },
           trigger: null, // trigger immediately

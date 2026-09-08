@@ -30,7 +30,7 @@ export const MediaCard: React.FC<Props> = ({ posterPath, title, year, rating, on
 
   const imageUrl = posterPath
     ? `https://image.tmdb.org/t/p/w342${posterPath}`
-    : 'https://via.placeholder.com/342x513.png?text=Sin+Imagen';
+    : 'https://placehold.co/342x513/1F1F1F/A0A0A0?text=Sin+Imagen';
 
   return (
     <Pressable

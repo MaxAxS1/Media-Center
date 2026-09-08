@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../config/theme';
 import { TMDBService } from '../services/tmdb';
@@ -22,6 +22,7 @@ import { MediaItem } from '../types';
 
 export default function DetailScreen() {
   const { id, mediaType } = useLocalSearchParams();
+  const router = useRouter();
   const [details, setDetails] = useState<any>(null);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,7 +236,12 @@ export default function DetailScreen() {
         <MediaRow
           title="Títulos Similares"
           data={similar}
-          onItemPress={() => {}}
+          onItemPress={(item) =>
+            router.push({
+              pathname: '/detail',
+              params: { id: item.id, mediaType: item.media_type || mt },
+            })
+          }
         />
       )}
     </ScrollView>
