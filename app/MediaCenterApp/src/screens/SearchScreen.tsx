@@ -1,19 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput, FlatList, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { theme } from '../config/theme';
 import { MediaCard } from '../components/MediaCard';
 import { TMDBService } from '../services/tmdb';
-import { MediaItem } from '../types';
+import { MediaItem, Genre } from '../types';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
-
-const GENRES = [
-  { id: 28, name: 'Acción', icon: '💥' },
-  { id: 35, name: 'Comedia', icon: '😂' },
-  { id: 18, name: 'Drama', icon: '🎭' },
-  { id: 27, name: 'Terror', icon: '👻' },
-  { id: 878, name: 'Ciencia Ficción', icon: '👽' },
-];
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -21,7 +13,27 @@ export default function SearchScreen() {
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
+  
+  // Tab state for Genres
+  const [mediaTab, setMediaTab] = useState<'movie' | 'tv'>('movie');
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [genresLoading, setGenresLoading] = useState(true);
+
+  useEffect(() => {
+    loadGenres(mediaTab);
+  }, [mediaTab]);
+
+  const loadGenres = async (type: 'movie' | 'tv') => {
+    setGenresLoading(true);
+    try {
+      const data = await TMDBService.getGenres(type);
+      setGenres(data || []);
+    } catch (e) {
+      console.error('Error loading genres:', e);
+    } finally {
+      setGenresLoading(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -32,9 +44,8 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (debouncedQuery.trim().length > 0) {
-      setSelectedGenre(null);
       performSearch(debouncedQuery);
-    } else if (!selectedGenre) {
+    } else {
       setResults([]);
     }
   }, [debouncedQuery]);
@@ -51,18 +62,16 @@ export default function SearchScreen() {
     }
   };
 
-  const handleGenrePress = async (genreId: number) => {
-    setSelectedGenre(genreId);
-    setQuery('');
-    setLoading(true);
-    try {
-      const data = await TMDBService.discoverByGenre('movie', genreId);
-      setResults(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const handleGenrePress = (genre: Genre) => {
+    router.push({
+      pathname: '/list',
+      params: { 
+        type: 'genre', 
+        genreId: genre.id, 
+        mediaType: mediaTab, 
+        title: `${genre.name} (${mediaTab === 'movie' ? 'Películas' : 'Series'})`
+      }
+    });
   };
 
   const handleMediaPress = (item: MediaItem) => {
@@ -78,7 +87,6 @@ export default function SearchScreen() {
           placeholderTextColor={theme.colors.text.secondary}
           value={query}
           onChangeText={setQuery}
-          autoFocus
         />
       </View>
 
@@ -92,19 +100,41 @@ export default function SearchScreen() {
         </View>
       ) : query.trim() === '' ? (
         <View style={styles.genresContainer}>
-          <Text style={styles.sectionTitle}>Explorar Géneros</Text>
-          <View style={styles.genresGrid}>
-            {GENRES.map(genre => (
-              <Pressable
-                key={genre.id}
-                style={[styles.genreCard, selectedGenre === genre.id && styles.genreCardActive]}
-                onPress={() => handleGenrePress(genre.id)}
-              >
-                <Text style={styles.genreIcon}>{genre.icon}</Text>
-                <Text style={styles.genreName}>{genre.name}</Text>
-              </Pressable>
-            ))}
+          <Text style={styles.sectionTitle}>Explorar por Género</Text>
+          
+          <View style={styles.tabContainer}>
+            <Pressable 
+              style={[styles.tabButton, mediaTab === 'movie' && styles.tabButtonActive]}
+              onPress={() => setMediaTab('movie')}
+            >
+              <Text style={[styles.tabText, mediaTab === 'movie' && styles.tabTextActive]}>Películas</Text>
+            </Pressable>
+            <Pressable 
+              style={[styles.tabButton, mediaTab === 'tv' && styles.tabButtonActive]}
+              onPress={() => setMediaTab('tv')}
+            >
+              <Text style={[styles.tabText, mediaTab === 'tv' && styles.tabTextActive]}>Series</Text>
+            </Pressable>
           </View>
+
+          {genresLoading ? (
+            <ActivityIndicator color={theme.colors.primary} size="large" style={{marginTop: 40}} />
+          ) : (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.genresGrid}>
+                {genres.map(genre => (
+                  <Pressable
+                    key={genre.id}
+                    style={styles.genreCard}
+                    onPress={() => handleGenrePress(genre)}
+                  >
+                    <Text style={styles.genreName}>{genre.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{height: 100}} />
+            </ScrollView>
+          )}
         </View>
       ) : results.length > 0 ? (
         <FlatList
@@ -133,6 +163,8 @@ export default function SearchScreen() {
   );
 }
 
+import { ActivityIndicator } from 'react-native';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -149,15 +181,42 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   genresContainer: {
+    flex: 1,
     padding: theme.spacing.lg,
   },
   sectionTitle: {
     color: theme.colors.text.primary,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
+    marginBottom: theme.spacing.md,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.full,
+    padding: 4,
     marginBottom: theme.spacing.lg,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    alignItems: 'center',
+    borderRadius: theme.borderRadius.full,
+  },
+  tabButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  tabText: {
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  tabTextActive: {
+    color: '#FFF',
   },
   genresGrid: {
     flexDirection: 'row',
@@ -165,27 +224,21 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   genreCard: {
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceLight,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     borderRadius: theme.borderRadius.md,
     width: '47%',
     alignItems: 'center',
-    flexDirection: 'row',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  genreCardActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: 'rgba(229, 9, 20, 0.15)',
-  },
-  genreIcon: {
-    fontSize: 24,
-    marginRight: theme.spacing.sm,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   genreName: {
     color: theme.colors.text.primary,
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   listContent: {
     padding: theme.spacing.sm,

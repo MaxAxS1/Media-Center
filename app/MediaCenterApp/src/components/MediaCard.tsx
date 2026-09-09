@@ -58,20 +58,22 @@ export const MediaCard: React.FC<Props> = ({ posterPath, title, year, rating, on
 
 const styles = StyleSheet.create({
   container: {
-    width: 120,
+    width: 130, // Slightly wider
     marginRight: theme.spacing.md,
   },
   imageContainer: {
-    width: 120,
-    height: 180,
+    width: 130,
+    height: 195, // Maintains 2:3 ratio
     borderRadius: theme.borderRadius.md,
     overflow: 'hidden',
     backgroundColor: theme.colors.surface,
-    elevation: 5,
+    elevation: 8, // Stronger shadow
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)', // Subtle stroke
   },
   image: {
     width: '100%',
@@ -80,27 +82,33 @@ const styles = StyleSheet.create({
   },
   ratingBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    top: 6,
+    right: 6,
+    backgroundColor: theme.colors.glass,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: theme.borderRadius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   ratingText: {
     color: theme.colors.text.primary,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
   },
   title: {
     color: theme.colors.text.primary,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     marginTop: theme.spacing.sm,
+    letterSpacing: 0.2,
   },
   year: {
     color: theme.colors.text.secondary,
     fontSize: 12,
     marginTop: 2,
+    fontWeight: '500',
   },
 });

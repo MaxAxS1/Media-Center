@@ -12,6 +12,22 @@ networks:
 
 services:
   # ----------------------------------------------------------
+  # Flaresolverr - Proxy para saltar protecciones de Cloudflare
+  # Puerto: 8191
+  # ----------------------------------------------------------
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ}
+    ports:
+      - "8191:8191"
+    restart: unless-stopped
+    networks:
+      - media-net
+
+  # ----------------------------------------------------------
   # Prowlarr — Gestor centralizado de indexadores torrent
   # Puerto: 9696
   # ----------------------------------------------------------

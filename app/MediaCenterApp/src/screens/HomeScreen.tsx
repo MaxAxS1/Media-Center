@@ -146,7 +146,7 @@ export default function HomeScreen() {
       }
     >
       {loading ? (
-        <LoadingSkeleton variant="detail" height={450} />
+        <LoadingSkeleton variant="detail" height={500} />
       ) : heroItem ? (
         <ImageBackground
           source={{
@@ -155,7 +155,7 @@ export default function HomeScreen() {
           style={styles.heroContainer}
         >
           <LinearGradient
-            colors={['transparent', 'rgba(20,20,20,0.8)', '#141414']}
+            colors={['transparent', 'rgba(15, 16, 20, 0.6)', '#0F1014']}
             style={styles.heroOverlay}
           >
             <Text style={styles.heroTitle} numberOfLines={2}>
@@ -175,7 +175,7 @@ export default function HomeScreen() {
                 style={styles.secondaryButton}
                 onPress={() => handleMediaPress(heroItem)}
               >
-                <Text style={styles.secondaryButtonText}>Ver Detalles</Text>
+                <Text style={styles.secondaryButtonText}>Info</Text>
               </Pressable>
             </View>
           </LinearGradient>
@@ -197,7 +197,7 @@ export default function HomeScreen() {
         {/* Fila de Favoritos del usuario si existen */}
         {favorites.length > 0 && (
           <MediaRow
-            title="❤️ Mi Lista de Favoritos"
+            title="❤️ Mi Lista"
             data={favorites.map((f) => ({
               id: f.id,
               title: f.title,
@@ -218,6 +218,7 @@ export default function HomeScreen() {
           data={trending}
           isLoading={loading}
           onItemPress={handleMediaPress}
+          onSeeAll={() => router.push({ pathname: '/list', params: { type: 'trending', mediaType: 'movie', title: 'Tendencias Hoy' } })}
         />
         <MediaRow
           title="📺 Series Populares"
@@ -236,6 +237,7 @@ export default function HomeScreen() {
           data={topRated}
           isLoading={loading}
           onItemPress={handleMediaPress}
+          onSeeAll={() => router.push({ pathname: '/list', params: { type: 'top_rated', mediaType: 'movie', title: 'Mejor Valoradas' } })}
         />
       </View>
     </ScrollView>

@@ -10,13 +10,16 @@ interface Props {
   data: MediaItem[];
   onItemPress: (item: MediaItem) => void;
   isLoading?: boolean;
+  onSeeAll?: () => void;
 }
 
-export const MediaRow: React.FC<Props> = ({ title, data, onItemPress, isLoading }) => {
+export const MediaRow: React.FC<Props> = ({ title, data, onItemPress, isLoading, onSeeAll }) => {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>{title}</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>{title}</Text>
+        </View>
         <View style={styles.skeletonContainer}>
           {[1, 2, 3, 4].map((key) => (
             <View key={key} style={{ marginRight: theme.spacing.md }}>
@@ -34,9 +37,11 @@ export const MediaRow: React.FC<Props> = ({ title, data, onItemPress, isLoading 
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
-        <Pressable>
-          <Text style={styles.moreText}>Ver más {'>'}</Text>
-        </Pressable>
+        {onSeeAll && (
+          <Pressable onPress={onSeeAll}>
+            <Text style={styles.moreText}>Ver más {'>'}</Text>
+          </Pressable>
+        )}
       </View>
       <FlatList
         horizontal
