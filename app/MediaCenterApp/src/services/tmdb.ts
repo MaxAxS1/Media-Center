@@ -28,22 +28,34 @@ const fetchTMDB = async <T>(endpoint: string, params: Record<string, string> = {
 };
 
 export class TMDBService {
-  static async getTrending(mediaType: 'movie' | 'tv' | 'all' = 'all', timeWindow: 'day' | 'week' = 'day'): Promise<MediaItem[]> {
-    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(`/trending/${mediaType}/${timeWindow}`);
-    return result.results;
+  static async getTrending(
+    mediaType: 'movie' | 'tv' | 'all' = 'all',
+    timeWindow: 'day' | 'week' = 'day',
+    page: number = 1
+  ): Promise<{ results: MediaItem[]; total_pages: number }> {
+    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(
+      `/trending/${mediaType}/${timeWindow}`,
+      { page: page.toString() }
+    );
+    return { results: result.results, total_pages: result.total_pages };
   }
 
-  static async getPopular(mediaType: 'movie' | 'tv'): Promise<MediaItem[]> {
-    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(`/${mediaType}/popular`);
-    return result.results;
+  static async getPopular(mediaType: 'movie' | 'tv', page: number = 1): Promise<{ results: MediaItem[]; total_pages: number }> {
+    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(
+      `/${mediaType}/popular`,
+      { page: page.toString() }
+    );
+    return { results: result.results, total_pages: result.total_pages };
   }
 
   static async getPopularTV(): Promise<MediaItem[]> {
-    return TMDBService.getPopular('tv');
+    const res = await TMDBService.getPopular('tv', 1);
+    return res.results;
   }
 
   static async getPopularMovies(): Promise<MediaItem[]> {
-    return TMDBService.getPopular('movie');
+    const res = await TMDBService.getPopular('movie', 1);
+    return res.results;
   }
 
   static async getNowPlaying(): Promise<MediaItem[]> {
@@ -51,9 +63,15 @@ export class TMDBService {
     return result.results as MediaItem[];
   }
 
-  static async getTopRated(mediaType: 'movie' | 'tv' = 'movie'): Promise<MediaItem[]> {
-    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(`/${mediaType}/top_rated`);
-    return result.results;
+  static async getTopRated(
+    mediaType: 'movie' | 'tv' = 'movie',
+    page: number = 1
+  ): Promise<{ results: MediaItem[]; total_pages: number }> {
+    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(
+      `/${mediaType}/top_rated`,
+      { page: page.toString(), sort_by: 'vote_average.desc', 'vote_count.gte': '200' }
+    );
+    return { results: result.results, total_pages: result.total_pages };
   }
 
   static async search(query: string, page: number = 1) {
@@ -79,9 +97,18 @@ export class TMDBService {
     return response.genres;
   }
 
-  static async discoverByGenre(mediaType: 'movie' | 'tv', genreId: number) {
-    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(`/discover/${mediaType}`, { with_genres: genreId.toString() });
-    return result.results;
+  static async discoverByGenre(
+    mediaType: 'movie' | 'tv',
+    genreId: number,
+    page: number = 1
+  ): Promise<{ results: MediaItem[]; total_pages: number }> {
+    const result = await fetchTMDB<TMDBSearchResult<MediaItem>>(`/discover/${mediaType}`, {
+      with_genres: genreId.toString(),
+      page: page.toString(),
+      sort_by: 'popularity.desc',
+      'vote_count.gte': '20',
+    });
+    return { results: result.results, total_pages: result.total_pages };
   }
 
   static getImageUrl(path: string | null, size: string = 'original') {

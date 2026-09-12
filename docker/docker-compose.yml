@@ -144,8 +144,9 @@ services:
   # Puerto: 5055
   # ----------------------------------------------------------
   seerr:
-    image: sctx/overseerr:latest
+    image: ghcr.io/seerr-team/seerr:latest
     container_name: seerr
+    user: root
     environment:
       - TZ=${TZ}
       - LOG_LEVEL=debug
