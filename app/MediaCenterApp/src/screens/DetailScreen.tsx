@@ -9,6 +9,7 @@ import {
   ImageBackground,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,14 @@ export default function DetailScreen() {
   const [requestStatus, setRequestStatus] = useState<'none' | 'pending' | 'available' | 'downloading' | 'queued'>('none');
   const [isFavorite, setIsFavorite] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [showQualityModal, setShowQualityModal] = useState(false);
+  const [mediaInfo, setMediaInfo] = useState<any>(null); // Seerr media object (contains mediaId for deletion)
+
+  const QUALITY_PROFILES = [
+    { label: '📺 720p', description: 'HD - Liviano', id: 3 },
+    { label: '🎬 1080p', description: 'Full HD — Recomendado', id: 4, recommended: true },
+    { label: '💎 4K', description: 'Ultra HD — Requiere más espacio', id: 5 },
+  ];
 
   const mt = (mediaType as 'movie' | 'tv') || 'movie';
   const numId = Number(id);
@@ -53,6 +62,7 @@ export default function DetailScreen() {
         // Consultar a Seerr si el servidor está online
         try {
           const statusRes = await SeerrService.getMediaStatus(numId, mt);
+          if (statusRes) setMediaInfo(statusRes);
           if (statusRes?.status === 5) {
             setRequestStatus('available');
           } else if (statusRes?.status === 4 || statusRes?.status === 3) {
@@ -94,21 +104,28 @@ export default function DetailScreen() {
     );
   };
 
-  const handleRequest = async () => {
+  // Opens the quality selection modal instead of requesting immediately
+  const handleRequest = () => {
+    if (!details) return;
+    setShowQualityModal(true);
+  };
+
+  // Called once user picks a quality from the modal
+  const handleConfirmRequest = async (qualityProfileId: number) => {
+    setShowQualityModal(false);
     if (!details) return;
     const title = details.title || details.name || 'Sin título';
     setRequesting(true);
 
     try {
       if (mt === 'movie') {
-        await SeerrService.requestMovie(numId);
+        await SeerrService.requestMovie(numId, qualityProfileId);
       } else {
-        await SeerrService.requestTV(numId);
+        await SeerrService.requestTV(numId, undefined, qualityProfileId);
       }
       setRequestStatus('pending');
       Alert.alert('¡Solicitud enviada!', 'El servidor ya comenzó a procesar la descarga.');
     } catch (err: any) {
-      // Si el servidor está apagado o fuera de red, lo guardamos en la cola local
       await LocalStorageService.addToQueue({
         tmdbId: numId,
         title,
@@ -123,6 +140,38 @@ export default function DetailScreen() {
     } finally {
       setRequesting(false);
     }
+  };
+
+  const handleDelete = () => {
+    const title = details?.title || details?.name || 'este contenido';
+    const isPending = requestStatus === 'pending';
+    Alert.alert(
+      isPending ? '❌ Cancelar solicitud' : '🗑 Eliminar contenido',
+      isPending
+        ? `¿Cancelar la solicitud de descarga de "${title}"?`
+        : `¿Eliminar "${title}" del servidor y del disco? Esta acción no se puede deshacer.`,
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: isPending ? 'Cancelar solicitud' : 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (mediaInfo?.id) {
+                await SeerrService.deleteMedia(mediaInfo.id);
+              } else if (mediaInfo?.requests?.[0]?.id) {
+                await SeerrService.cancelRequest(mediaInfo.requests[0].id);
+              }
+              setRequestStatus('none');
+              setMediaInfo(null);
+              Alert.alert('Listo', isPending ? 'Solicitud cancelada.' : 'Contenido eliminado del servidor.');
+            } catch (e) {
+              Alert.alert('Error', 'No se pudo completar la operación. Verificá que el servidor esté encendido.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -223,6 +272,13 @@ export default function DetailScreen() {
             {isFavorite ? 'En Favoritos' : 'Favorito'}
           </Text>
         </Pressable>
+
+        {/* Delete / Cancel button — shown only when there's an active request or content */}
+        {(requestStatus === 'pending' || requestStatus === 'available' || requestStatus === 'downloading') && (
+          <Pressable style={styles.deleteButton} onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={20} color="#FF4444" />
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -244,6 +300,43 @@ export default function DetailScreen() {
           }
         />
       )}
+
+      {/* Quality Selection Modal */}
+      <Modal
+        visible={showQualityModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowQualityModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowQualityModal(false)}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Seleccionar Calidad</Text>
+            <Text style={styles.modalSubtitle}>
+              {details?.title || details?.name}
+            </Text>
+            {QUALITY_PROFILES.map((profile) => (
+              <Pressable
+                key={profile.id}
+                style={[styles.qualityOption, profile.recommended && styles.qualityOptionRecommended]}
+                onPress={() => handleConfirmRequest(profile.id)}
+              >
+                <View style={styles.qualityOptionLeft}>
+                  <Text style={styles.qualityLabel}>{profile.label}</Text>
+                  <Text style={styles.qualityDescription}>{profile.description}</Text>
+                </View>
+                {profile.recommended && (
+                  <View style={styles.recommendedBadge}>
+                    <Text style={styles.recommendedText}>Recomendado</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+            <Pressable style={styles.cancelModalButton} onPress={() => setShowQualityModal(false)}>
+              <Text style={styles.cancelModalText}>Cancelar</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -387,5 +480,86 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     fontSize: 14,
     lineHeight: 22,
+  },
+  deleteButton: {
+    width: 46,
+    backgroundColor: 'rgba(255, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: '#FF444455',
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.borderRadius.lg,
+    borderTopRightRadius: theme.borderRadius.lg,
+    padding: theme.spacing.xl,
+    paddingBottom: theme.spacing.xl + 16,
+    gap: theme.spacing.md,
+  },
+  modalTitle: {
+    color: theme.colors.text.primary,
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: theme.colors.text.secondary,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  qualityOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  qualityOptionRecommended: {
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(229,9,20,0.08)',
+  },
+  qualityOptionLeft: {
+    gap: 3,
+  },
+  qualityLabel: {
+    color: theme.colors.text.primary,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  qualityDescription: {
+    color: theme.colors.text.secondary,
+    fontSize: 13,
+  },
+  recommendedBadge: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  recommendedText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  cancelModalButton: {
+    marginTop: theme.spacing.sm,
+    alignItems: 'center',
+    padding: theme.spacing.md,
+  },
+  cancelModalText: {
+    color: theme.colors.text.secondary,
+    fontSize: 15,
   },
 });

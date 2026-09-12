@@ -33,26 +33,25 @@ export class SeerrService {
     return fetchSeerr<any>(`/search?query=${encodeURIComponent(query)}`);
   }
 
-  static async requestMovie(tmdbId: number) {
+  static async requestMovie(tmdbId: number, qualityProfileId?: number) {
     return fetchSeerr<any>('/request', {
       method: 'POST',
       body: JSON.stringify({
         mediaId: tmdbId,
         mediaType: 'movie',
+        ...(qualityProfileId ? { profileId: qualityProfileId } : {}),
       }),
     });
   }
 
-  static async requestTV(tmdbId: number, seasons?: number[]) {
+  static async requestTV(tmdbId: number, seasons?: number[], qualityProfileId?: number) {
     return fetchSeerr<any>('/request', {
       method: 'POST',
       body: JSON.stringify({
         mediaId: tmdbId,
         mediaType: 'tv',
-        // Si no se especifican temporadas, solicita todas (Seerr maneja esto automáticamente)
-        ...(seasons && seasons.length > 0
-          ? { seasons }
-          : {}),
+        ...(seasons && seasons.length > 0 ? { seasons } : {}),
+        ...(qualityProfileId ? { profileId: qualityProfileId } : {}),
       }),
     });
   }
@@ -71,6 +70,13 @@ export class SeerrService {
 
   static async cancelRequest(requestId: number) {
     return fetchSeerr<any>(`/request/${requestId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Deletes media from Radarr/Sonarr AND disk via Seerr
+  static async deleteMedia(mediaId: number) {
+    return fetchSeerr<any>(`/media/${mediaId}`, {
       method: 'DELETE',
     });
   }
