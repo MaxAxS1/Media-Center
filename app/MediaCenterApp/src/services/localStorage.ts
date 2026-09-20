@@ -4,6 +4,14 @@ import { SeerrService } from './seerr';
 
 const FAVORITES_KEY = 'LOCAL_FAVORITES';
 const QUEUE_KEY = 'OFFLINE_DOWNLOAD_QUEUE';
+const SEARCH_HISTORY_KEY = 'SEARCH_HISTORY';
+const SEARCH_HISTORY_MAX = 20;
+const SEARCH_HISTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días en ms
+
+export interface SearchHistoryItem {
+  query: string;
+  timestamp: number; // Date.now()
+}
 
 export class LocalStorageService {
   // ================= FAVORITOS / RECOMENDACIONES =================
@@ -132,6 +140,62 @@ export class LocalStorageService {
       await AsyncStorage.setItem('LAST_NOTIFIED_ID', id.toString());
     } catch (error) {
       console.error(error);
+    }
+  }
+
+  // ================= HISTORIAL DE BÚSQUEDA =================
+
+  /** Devuelve el historial, filtrando entradas más viejas que 7 días */
+  static async getSearchHistory(): Promise<SearchHistoryItem[]> {
+    try {
+      const data = await AsyncStorage.getItem(SEARCH_HISTORY_KEY);
+      const all: SearchHistoryItem[] = data ? JSON.parse(data) : [];
+      const cutoff = Date.now() - SEARCH_HISTORY_TTL_MS;
+      return all.filter((item) => item.timestamp >= cutoff);
+    } catch (e) {
+      console.error('Error fetching search history', e);
+      return [];
+    }
+  }
+
+  /** Agrega una búsqueda al historial (evita duplicados, mantiene máx 20 entradas) */
+  static async addToSearchHistory(query: string): Promise<void> {
+    if (!query.trim()) return;
+    try {
+      const history = await this.getSearchHistory();
+      // Eliminar entrada duplicada si ya existe (para moverla al tope)
+      const filtered = history.filter(
+        (h) => h.query.toLowerCase() !== query.toLowerCase()
+      );
+      const updated: SearchHistoryItem[] = [
+        { query: query.trim(), timestamp: Date.now() },
+        ...filtered,
+      ].slice(0, SEARCH_HISTORY_MAX);
+      await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error saving search history', e);
+    }
+  }
+
+  /** Elimina una entrada específica del historial */
+  static async removeFromSearchHistory(query: string): Promise<void> {
+    try {
+      const history = await this.getSearchHistory();
+      const updated = history.filter(
+        (h) => h.query.toLowerCase() !== query.toLowerCase()
+      );
+      await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error removing search history item', e);
+    }
+  }
+
+  /** Borra todo el historial */
+  static async clearSearchHistory(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(SEARCH_HISTORY_KEY);
+    } catch (e) {
+      console.error('Error clearing search history', e);
     }
   }
 }
