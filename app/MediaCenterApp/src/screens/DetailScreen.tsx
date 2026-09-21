@@ -45,6 +45,7 @@ export default function DetailScreen() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // FASE 1: Cargar TMDB y storage local en paralelo → UI visible al instante
         const [data, similarData, favStatus, queuedStatus] = await Promise.all([
           TMDBService.getDetails(mt, numId),
           TMDBService.getSimilar(mt, numId),
@@ -54,29 +55,29 @@ export default function DetailScreen() {
         setDetails(data);
         setSimilar(similarData);
         setIsFavorite(favStatus);
+        if (queuedStatus) setRequestStatus('queued');
 
-        if (queuedStatus) {
-          setRequestStatus('queued');
-        }
+        // Mostrar contenido YA (no esperar a Seerr)
+        setLoading(false);
 
-        // Consultar a Seerr si el servidor está online
-        try {
-          const statusRes = await SeerrService.getMediaStatus(numId, mt);
-          if (statusRes) setMediaInfo(statusRes);
-          if (statusRes?.status === 5) {
-            setRequestStatus('available');
-          } else if (statusRes?.status === 4 || statusRes?.status === 3) {
-            setRequestStatus('downloading');
-          } else if (statusRes?.status === 2) {
-            setRequestStatus('pending');
-          }
-        } catch (_) {
-          // Si Seerr no responde (server apagado), mantenemos queued o none
-          if (!queuedStatus) setRequestStatus('none');
-        }
+        // FASE 2: Consultar Seerr en background sin bloquear la UI
+        SeerrService.getMediaStatus(numId, mt)
+          .then((statusRes) => {
+            if (statusRes) setMediaInfo(statusRes);
+            if (statusRes?.status === 5) {
+              setRequestStatus('available');
+            } else if (statusRes?.status === 4 || statusRes?.status === 3) {
+              setRequestStatus('downloading');
+            } else if (statusRes?.status === 2) {
+              setRequestStatus('pending');
+            }
+          })
+          .catch(() => {
+            if (!queuedStatus) setRequestStatus('none');
+          });
+
       } catch (error) {
         console.error('Error loading details:', error);
-      } finally {
         setLoading(false);
       }
     };
