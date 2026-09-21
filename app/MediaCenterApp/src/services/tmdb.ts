@@ -1,3 +1,13 @@
+/**
+ * @file tmdb.ts
+ * @description Cliente para The Movie Database (TMDB) API v3.
+ * Provee metadatos, búsqueda, géneros, trending, y paginación.
+ *
+ * Todas las funciones de listado aceptan `page` y retornan `{ results, total_pages }`
+ * para soportar scroll infinito (TMDB permite hasta 500 páginas).
+ *
+ * Documentación oficial: https://developer.themoviedb.org/docs
+ */
 import { TMDB_CONFIG } from '../config/api';
 import { TMDBSearchResult, TMDBMovie, Genre, MediaItem } from '../types';
 import { getSettings } from './apiClient';

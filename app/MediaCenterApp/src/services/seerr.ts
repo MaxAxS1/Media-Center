@@ -1,3 +1,12 @@
+/**
+ * @file seerr.ts
+ * @description Cliente HTTP para la API de Seerr (sucesor de Overseerr).
+ * Gestiona solicitudes de descarga de películas y series, consulta de estado
+ * de contenido, y eliminación de contenido del servidor.
+ *
+ * Endpoints base: /api/v1/
+ * Autenticación: Header X-Api-Key
+ */
 import { getSettings } from './apiClient';
 import { SeerrMediaRequest } from '../types';
 

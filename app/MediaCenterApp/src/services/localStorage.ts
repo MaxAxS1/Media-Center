@@ -1,4 +1,15 @@
+/**
+ * @file localStorage.ts
+ * @description Servicio de persistencia local usando AsyncStorage.
+ *
+ * Gestiona:
+ * - **Favoritos**: lista de títulos marcados por el usuario.
+ * - **Cola offline**: solicitudes pendientes que se sincronizan cuando el servidor vuelve online.
+ * - **Historial de búsqueda**: últimas 20 búsquedas, con expiración automática a los 7 días.
+ * - **Notificaciones**: estado del último ID notificado.
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { FavoriteItem, OfflineQueueItem } from '../types';
 import { SeerrService } from './seerr';
 

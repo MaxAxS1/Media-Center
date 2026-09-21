@@ -1,192 +1,310 @@
-# 🎬 Media Center & Mobile App
+# 🎬 Media Center
 
-Sistema integral y automatizado para descubrimiento, solicitud, descarga y reproducción de películas y series en red local, acompañado de una **aplicación móvil Android personalizada (React Native + Expo)** inspirada en Netflix.
-
----
-
-## 📌 Tabla de Contenidos
-
-1. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-2. [Estructura del Proyecto](#-estructura-del-proyecto)
-3. [Guía Rápida: Despliegue del Servidor (Docker)](#-guía-rápida-despliegue-del-servidor-docker)
-4. [Configuración Inicial de los Servicios](#-configuración-inicial-de-los-servicios)
-5. [Guía Rápida: Aplicación Móvil Android](#-guía-rápida-aplicación-móvil-android)
-6. [Cómo Obtener las API Keys](#-cómo-obtener-las-api-keys)
-7. [Preguntas Frecuentes y Solución de Problemas](#-preguntas-frecuentes-y-solución-de-problemas)
+Un sistema completo de gestión y descarga de contenido multimedia, compuesto por una **app móvil Android** y una **infraestructura de servidor** basada en Docker.
 
 ---
 
-## 🏗 Arquitectura del Sistema
+## 📱 App Móvil — Media Center App
 
-```text
-📱 App Android (React Native + Expo)
-   │
-   ├──► TMDB API ──────────────► Tendencias, carátulas y recomendaciones
-   ├──► Seerr API (/api/v1) ────► Envío de solicitudes y monitoreo en vivo
-   └──► Plex API ──────────────► Exploración del catálogo personal
-          │
-          ▼
-⚙️ Servidor Local (Docker Stack en Windows/Linux)
-   ├── [Seerr:5055] ──► Centraliza las peticiones de la app móvil
-   │        │
-   │        ├──► [Radarr:7878]  ──► Monitoreo de Películas (WEB-DL 1080p / 4K)
-   │        └──► [Sonarr:8989]  ──► Monitoreo de Series y nuevos episodios
-   │                  │
-   ├── [Prowlarr:9696]◄┘ (Sincroniza rastreadores e indexadores de torrents)
-   │        │
-   ├── [qBittorrent:8080] ◄── Descarga con carpetas dedicadas (radarr / tv-sonarr)
-   │        │
-   ├── [Bazarr:6767] ──────► Descarga automática de subtítulos en Español Latino
-   │        │
-   └── [Plex Media Server] ─► Servidor de streaming y reproducción final
+App nativa para Android construida con **Expo (React Native)** que permite buscar, solicitar y gestionar películas y series directamente desde tu celular.
+
+### Características
+- 🏠 **Home** — Tendencias, Top Rated y populares con scroll infinito
+- 🔍 **Búsqueda** — Búsqueda en tiempo real con historial de 7 días + explorar por género
+- 🎬 **Detalle** — Sinopsis, géneros, calificación, solicitar descarga con selector de calidad y eliminar contenido
+- 📚 **Biblioteca** — Visualiza tu contenido de Plex con posters e ingresa al detalle
+- ⬇️ **Descargas** — Cola offline: las solicitudes se guardan y se sincronizan cuando el servidor vuelve a estar online
+- ⚙️ **Ajustes** — Configuración de URLs y API Keys de todos los servicios
+
+### Stack Tecnológico
+- **Framework:** Expo (Managed Workflow) + Expo Router v3
+- **UI:** React Native con estilos propios (sin UI libraries)
+- **Build:** EAS Build (cloud, no requiere Android Studio)
+- **Almacenamiento local:** AsyncStorage
+- **APIs consumidas:** TMDB, Seerr, Radarr, Sonarr, Plex
+
+---
+
+## 🖥️ Infraestructura del Servidor
+
+Todos los servicios corren en **Docker Desktop** sobre Windows. Plex corre de forma nativa.
+
+### Diagrama de Flujo
+
+```
+App Móvil
+    │
+    ├─► TMDB API ──────────────────── Metadatos, posters, búsqueda
+    │
+    └─► Seerr (5055) ──────────────── Gestión de solicitudes
+            │
+            ├─► Radarr (7878) ──────── Automatización de películas
+            │       └─► qBittorrent (8080) ──── Descarga torrent
+            │               └─► /data/media/movies ──► Plex
+            │
+            ├─► Sonarr (8989) ──────── Automatización de series
+            │       └─► qBittorrent (8080) ──── Descarga torrent
+            │               └─► /data/media/tv ──────► Plex
+            │
+            └─► Plex (32400) ──────── Reproducción (nativo en Windows)
+
+Prowlarr (9696) ──── Indexadores torrent → Radarr + Sonarr
+Bazarr (6767) ────── Subtítulos automáticos ← Sonarr + Radarr
+Flaresolverr (8191) ── Proxy anti-Cloudflare para indexadores
 ```
 
----
+### Servicios
 
-## 📂 Estructura del Proyecto
-
-```text
-Media-Center/
-├── docker/
-│   ├── docker-compose.yml       # Definición de los 6 servicios (Prowlarr, Radarr, Sonarr, qBittorrent, Bazarr, Seerr)
-│   ├── .env.example             # Plantilla de variables y rutas de almacenamiento
-│   ├── setup.sh                 # Script de creación de carpetas para Linux/WSL/Git Bash
-│   └── README.md                # Guía avanzada de configuración paso a paso
-├── app/
-│   └── MediaCenterApp/          # Código fuente de la app Android (Expo Router + TypeScript)
-│       ├── app/                 # Rutas de navegación (Tabs: Inicio, Buscar, Descargas, Biblioteca, Ajustes)
-│       ├── src/
-│       │   ├── screens/         # Pantallas principales
-│       │   ├── components/      # Componentes reutilizables (MediaCard, MediaRow, LoadingSkeleton)
-│       │   ├── services/        # Clientes de API (TMDB, Seerr, Plex, cliente común con AsyncStorage)
-│       │   ├── config/          # Paleta de colores (tema cine oscuro) y constantes
-│       │   └── types/           # Tipado TypeScript estricto
-│       ├── app.json             # Configuración de paquete Android y Expo
-│       └── README.md            # Manual de ejecución en teléfono móvil
-└── README.md                    # Documentación principal del repositorio
-```
+| Servicio | Puerto | Descripción |
+|---|---|---|
+| **Plex** | 32400 | Servidor de medios (nativo Windows) |
+| **Seerr** | 5055 | Portal de solicitudes (sucesor de Overseerr) |
+| **Radarr** | 7878 | Automatización y gestión de películas |
+| **Sonarr** | 8989 | Automatización y gestión de series |
+| **qBittorrent** | 8080 | Cliente de descargas torrent |
+| **Prowlarr** | 9696 | Gestor centralizado de indexadores |
+| **Bazarr** | 6767 | Descarga automática de subtítulos |
+| **Flaresolverr** | 8191 | Proxy para bypass de Cloudflare |
 
 ---
 
-## 🚀 Guía Rápida: Despliegue del Servidor (Docker)
+## 🚀 Instalación del Servidor
 
-### Requisitos
-- PC con Windows 10/11 (o Linux) que funcione como servidor local.
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado con motor **WSL 2**.
-- [Plex Media Server](https://www.plex.tv/media-server-downloads/) instalado en el equipo.
+### Prerrequisitos
+- Windows 10/11
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo
+- [Plex Media Server](https://www.plex.tv/media-server-downloads/) instalado nativamente
 
-### Pasos de Despliegue
+### 1. Clonar el repositorio
 
-1. **Clona o copia este repositorio en tu servidor**:
-   ```bash
-   git clone https://github.com/MaxAxS1/Media-Center.git
-   cd Media-Center/docker
-   ```
-
-2. **Crea y ajusta el archivo de entorno**:
-   Copia el archivo `.env.example` y renómbralo a `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-   Abre `.env` con un editor de texto y define el disco donde guardarás tus descargas y series/películas:
-   ```ini
-   DATA_PATH=D:/data
-   CONFIG_PATH=C:/docker/config
-   TZ=America/Argentina/Buenos_Aires
-   PUID=1000
-   PGID=1000
-   ```
-
-3. **Crea las carpetas de datos**:
-   En PowerShell ejecuta:
-   ```powershell
-   mkdir -Force D:\data\torrents\movies
-   mkdir -Force D:\data\torrents\tv
-   mkdir -Force D:\data\media\movies
-   mkdir -Force D:\data\media\tv
-   ```
-
-4. **Inicia el stack completo**:
-   ```bash
-   docker compose up -d
-   ```
-   Para comprobar que todos los contenedores arrancaron correctamente:
-   ```bash
-   docker compose ps
-   ```
-
----
-
-## 🌐 Configuración Inicial de los Servicios
-
-Una vez levantados, ingresa a las interfaces web desde tu navegador:
-
-| Servicio | URL Local | Configuración Clave |
-| :--- | :--- | :--- |
-| **Prowlarr** | `http://localhost:9696` | Agrega tus indexadores torrent y vincúlalo en *Settings > Apps* con Sonarr (`http://sonarr:8989`) y Radarr (`http://radarr:7878`). |
-| **qBittorrent** | `http://localhost:8080` | Usuario `admin`. Crea 2 categorías en descargas: `radarr` (ruta `/data/torrents/movies`) y `tv-sonarr` (ruta `/data/torrents/tv`). |
-| **Radarr** | `http://localhost:7878` | En *Media Management* ruta raíz: `/data/media/movies`. En *Download Clients* agrega qBittorrent (categoría `radarr`). Calidad recomendada: **WEB-DL 1080p y 4K** (desactivar Remux para streaming liviano). |
-| **Sonarr** | `http://localhost:8989` | En *Media Management* ruta raíz: `/data/media/tv`. En *Download Clients* agrega qBittorrent (categoría `tv-sonarr`). Mismo perfil de calidad. |
-| **Bazarr** | `http://localhost:6767` | En *Languages* selecciona **Spanish (Latin America)** como idioma preferido. Conecta proveedores como OpenSubtitles.com y Subdl. |
-| **Seerr** | `http://localhost:5055` | Asistente inicial: conecta con tu Plex y con tus instancias de Radarr y Sonarr. En *Settings > General* obtén tu **API Key**. |
-
----
-
-## 📱 Guía Rápida: Aplicación Móvil Android
-
-### Cómo Probarla en tu Celular (Modo Desarrollo)
-
-1. Instala **Expo Go** desde [Google Play Store](https://play.google.com/store/apps/details?id=host.exp.exponent).
-2. Asegúrate de que tu celular y tu PC estén en la misma red Wi-Fi.
-3. En la PC, abre una terminal en la carpeta de la app:
-   ```bash
-   cd app/MediaCenterApp
-   npm install
-   npx expo start
-   ```
-4. Selecciona `Proceed anonymously` y escanea el código QR desde la app **Expo Go**.
-
-### Funcionalidades de la App
-- **Inicio**: Carruseles interactivos con novedades mundiales de TMDB y títulos en cartelera.
-- **Búsqueda**: Buscador predictivo en tiempo real y filtrado instantáneo por género.
-- **Ficha Técnica**: Sinopsis, valoraciones, títulos similares y el botón **"Solicitar Descarga"**.
-- **Descargas**: Monitor en vivo que consulta a Seerr para ver solicitudes activas, en proceso y completadas.
-- **Biblioteca**: Visualización de los títulos almacenados en tu servidor local.
-- **Ajustes**: Configuración persistente con botones para comprobar en directo la conexión con TMDB, Seerr y Plex.
-
----
-
-## 🔑 Cómo Obtener las API Keys
-
-1. **TMDB API Key (Gratuita)**:
-   - Ingresa en [themoviedb.org](https://www.themoviedb.org/) y crea tu cuenta.
-   - Ve a **Ajustes > API > Crear > Developer**.
-   - Completa el breve formulario y copia tu **API Key (v3 auth)**.
-   - Pégala en la pestaña **Ajustes** de tu app móvil.
-
-2. **Seerr API Key**:
-   - Abre Seerr en tu servidor (`http://localhost:5055` o `http://IP_DEL_SERVER:5055`).
-   - Ve a **Settings > General** y copia la **API Key**.
-
-3. **Plex Token (Opcional)**:
-   - Entra a Plex Web en cualquier navegador.
-   - En cualquier película, haz clic en `...` > **Obtener Información** > **Ver XML**.
-   - Al final de la URL en la barra de direcciones copia el código posterior a `X-Plex-Token=`.
-
----
-
-## ❓ Preguntas Frecuentes y Solución de Problemas
-
-#### 1. ¿Por qué mi app no conecta con el servidor Docker?
-Asegúrate de usar la **dirección IP local** de tu servidor (ejemplo: `http://192.168.1.50:5055`) y no `localhost`, ya que para tu teléfono `localhost` representa al mismo celular. Verifica además que el Firewall de Windows en la PC permita tráfico en los puertos correspondientes.
-
-#### 2. ¿Por qué se configuraron perfiles WEB-DL en vez de Remux?
-Los formatos *Remux* conservan el disco Blu-ray original sin comprimir (40 a 80 GB por archivo) y suelen requerir transcodificación intensiva si el reproductor no soporta el códec de audio/video. El perfil **WEB-DL 1080p / 4K** ofrece calidad visual nítida en archivos mucho más livianos (2 a 8 GB) que reproducen instantáneamente por streaming directo.
-
-#### 3. ¿Cómo sincronizo cambios en el repositorio de GitHub?
-Desde la carpeta raíz del proyecto puedes sincronizar con:
 ```bash
-git add .
-git commit -m "update: resumen de cambios"
-git push origin main
+git clone https://github.com/MaxAxS1/Media-Center.git
+cd Media-Center
 ```
+
+### 2. Configurar variables de entorno
+
+Copiá el archivo de ejemplo y editalo:
+
+```bash
+cp docker/.env.example docker/.env
+```
+
+Editá `docker/.env`:
+
+```env
+# Zona horaria
+TZ=America/Argentina/Buenos_Aires
+
+# Usuario/Grupo Linux (en Windows usar 1000)
+PUID=1000
+PGID=1000
+
+# Rutas absolutas del servidor
+CONFIG_PATH=F:/docker/config
+DATA_PATH=F:/data
+```
+
+### 3. Levantar los contenedores
+
+```bash
+cd docker
+docker compose up -d
+```
+
+### 4. Estructura de carpetas de datos
+
+```
+F:\data\
+├── torrents\          ← qBittorrent descarga aquí
+│   ├── movies\
+│   └── tv\
+└── media\             ← Plex lee desde aquí
+    ├── movies\
+    └── tv\
+```
+
+---
+
+## 📱 Compilar la App
+
+### Prerrequisitos
+- Node.js 18+
+- Cuenta gratuita en [expo.dev](https://expo.dev)
+
+### 1. Instalar dependencias
+
+```bash
+cd app/MediaCenterApp
+npm install
+npx eas-cli login
+```
+
+### 2. Configurar la app
+
+Editá `src/config/api.ts` con las IPs y API Keys de tus servicios:
+
+```typescript
+export const SERVER_CONFIG = {
+  SEERR_URL:     'http://TU-IP:5055',
+  SEERR_API_KEY: 'tu-api-key-de-seerr',
+  RADARR_URL:    'http://TU-IP:7878',
+  RADARR_API_KEY:'tu-api-key-de-radarr',
+  SONARR_URL:    'http://TU-IP:8989',
+  SONARR_API_KEY:'tu-api-key-de-sonarr',
+  PLEX_URL:      'http://TU-IP:32400',
+  PLEX_TOKEN:    'tu-plex-token',
+};
+
+export const TMDB_CONFIG = {
+  API_KEY: 'tu-api-key-de-tmdb',
+  BASE_URL: 'https://api.themoviedb.org/3',
+  IMAGE_BASE_URL: 'https://image.tmdb.org/t/p',
+};
+```
+
+> **Consejo:** Si usás ZeroTier o Tailscale para acceder desde fuera de tu casa, usá la IP de VPN como `TU-IP`.
+
+### 3. Generar el APK
+
+```bash
+npx eas-cli build -p android --profile preview
+```
+
+El build se realiza en la nube (~5-10 minutos). Al terminar te genera un link de descarga del `.apk` para instalar directamente en tu celular.
+
+---
+
+## 🌐 Acceso Remoto
+
+Para acceder a los servicios desde fuera de casa, el proyecto está configurado para funcionar con **ZeroTier** o **Tailscale**.
+
+### Con ZeroTier
+1. Instalá ZeroTier en tu PC y en tu celular/TV
+2. Uníte a la misma red desde todos los dispositivos
+3. Usá la IP de ZeroTier de tu PC (ej: `10.x.x.x`) como `TU-IP` en la configuración de la app
+
+### Con Tailscale
+1. Instalá Tailscale en todos los dispositivos
+2. Usá la IP de Tailscale de tu PC (ej: `100.x.x.x`) como `TU-IP`
+3. En Plex → Configuración → Red → agregar `http://100.x.x.x:32400` en "URLs de acceso personalizado"
+4. En Plex → Red → "Lista de IPs sin autenticación": agregar `100.64.0.0/10`
+
+---
+
+## 🎯 Configuración de Calidad de Contenido
+
+### Perfiles de Calidad (Radarr y Sonarr)
+
+| ID | Nombre | Uso recomendado |
+|---|---|---|
+| 3 | HD-720p | Conexión lenta o poco espacio |
+| 4 | HD-1080p | **Recomendado** — Mejor relación calidad/tamaño |
+| 5 | Ultra-HD | TV 4K con espacio de sobra |
+
+### Audio en Español Latino
+Formato personalizado configurado en Radarr y Sonarr:
+- **Regex:** `(?i)\b(latino|lat|dual|multi)\b`
+- **Score:** 100 pts
+- `minFormatScore = 0` → permite inglés como fallback
+- `cutoffFormatScore = 100` → deja de buscar upgrades cuando encuentra latino
+
+---
+
+## 📁 Estructura del Proyecto
+
+```
+Media-Center/
+├── app/
+│   └── MediaCenterApp/          ← App Expo/React Native
+│       ├── app/                 ← Rutas (Expo Router)
+│       │   ├── (tabs)/          ← Tabs principales
+│       │   │   ├── index.tsx    ← Home
+│       │   │   ├── search.tsx   ← Búsqueda
+│       │   │   ├── library.tsx  ← Biblioteca Plex
+│       │   │   ├── downloads.tsx← Cola de descargas
+│       │   │   └── settings.tsx ← Ajustes
+│       │   ├── detail.tsx       ← Detalle de película/serie
+│       │   └── list.tsx         ← Lista con scroll infinito
+│       └── src/
+│           ├── components/      ← Componentes reutilizables
+│           │   ├── MediaCard.tsx
+│           │   ├── MediaRow.tsx
+│           │   └── LoadingSkeleton.tsx
+│           ├── config/
+│           │   ├── api.ts       ← URLs y API Keys
+│           │   └── theme.ts     ← Paleta de colores y estilos
+│           ├── screens/         ← Pantallas principales
+│           │   ├── HomeScreen.tsx
+│           │   ├── SearchScreen.tsx
+│           │   ├── DetailScreen.tsx
+│           │   ├── LibraryScreen.tsx
+│           │   ├── DownloadsScreen.tsx
+│           │   └── SettingsScreen.tsx
+│           ├── services/        ← Clientes de API
+│           │   ├── tmdb.ts      ← TMDB (metadatos)
+│           │   ├── seerr.ts     ← Seerr (solicitudes)
+│           │   ├── plex.ts      ← Plex (biblioteca)
+│           │   ├── localStorage.ts ← AsyncStorage (favoritos, historial, cola)
+│           │   ├── apiClient.ts ← Configuración general
+│           │   └── notifications.ts
+│           └── types/
+│               └── index.ts     ← Tipos TypeScript globales
+└── docker/
+    ├── docker-compose.yml       ← Stack completo de servicios
+    └── .env.example             ← Plantilla de configuración
+```
+
+---
+
+## 🔧 Firewall de Windows
+
+Para que los servicios sean accesibles desde otros dispositivos (celular, TV), es necesario abrir los puertos en el Firewall de Windows. Ejecutá en PowerShell como administrador:
+
+```powershell
+New-NetFirewallRule -DisplayName "Media Center - Seerr"       -Direction Inbound -Protocol TCP -LocalPort 5055 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Media Center - Radarr"      -Direction Inbound -Protocol TCP -LocalPort 7878 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Media Center - Sonarr"      -Direction Inbound -Protocol TCP -LocalPort 8989 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Media Center - qBittorrent" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Media Center - Prowlarr"    -Direction Inbound -Protocol TCP -LocalPort 9696 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Media Center - Bazarr"      -Direction Inbound -Protocol TCP -LocalPort 6767 -Action Allow -Profile Any
+```
+
+---
+
+## 📝 Obtener API Keys
+
+| Servicio | Dónde obtenerla |
+|---|---|
+| **TMDB** | [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) — Gratuita |
+| **Radarr** | Settings → General → API Key |
+| **Sonarr** | Settings → General → API Key |
+| **Prowlarr** | Settings → General → API Key |
+| **Seerr** | Settings → General → API Key |
+| **Plex Token** | [Cómo encontrar tu token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
+
+---
+
+## 🛠️ Solución de Problemas Comunes
+
+### La app dice "Servidor apagado"
+1. Verificá que Docker Desktop esté corriendo
+2. Verificá que los contenedores estén activos: `docker ps`
+3. Verificá que el Firewall de Windows tenga los puertos abiertos (ver sección anterior)
+4. Si estás fuera de casa, verificá que ZeroTier/Tailscale esté conectado en ambos dispositivos
+
+### Plex aparece offline en la app de Plex
+- Agregá tu IP de VPN (ZeroTier/Tailscale) en Plex → Configuración → Red → "URL de acceso personalizado"
+- Formato: `http://TU-IP-VPN:32400`
+
+### Sonarr no encuentra series en español latino
+- Sonarr busca por título en inglés. Para series con nombre muy diferente al original, usá Prowlarr para buscar manualmente y agregá el torrent a qBittorrent con la categoría `tv-sonarr`
+
+### Seerr tarda en cargar el estado de una película
+- Es normal: la app muestra la pantalla inmediatamente con los datos de TMDB y consulta el estado a Seerr en segundo plano (~600ms). El botón se actualiza solo cuando llega la respuesta.
+
+---
+
+## 📄 Licencia
+
+Proyecto personal — Sin licencia definida.
