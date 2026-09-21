@@ -1,18 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Image,
+} from 'react-native';
 import { theme } from '../config/theme';
-import { MediaCard } from '../components/MediaCard';
 import { PlexService } from '../services/plex';
 import { getSettings } from '../services/apiClient';
 import { useRouter } from 'expo-router';
+import { TMDBService } from '../services/tmdb';
+
+// Extrae el TMDB ID de los Guids de un ítem de Plex
+const getTmdbIdFromGuids = (item: any): number | null => {
+  const guids: any[] = item.Guid || [];
+  for (const g of guids) {
+    const id = g.id || '';
+    if (id.startsWith('tmdb://')) {
+      const parsed = parseInt(id.replace('tmdb://', ''), 10);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  // Fallback: guid string (e.g. "com.plexapp.agents.themoviedb://12345?...")
+  const guid: string = item.guid || '';
+  const match = guid.match(/themoviedb:\/\/(\d+)/);
+  if (match) return parseInt(match[1], 10);
+  return null;
+};
+
+// Tipo inferido del tipo de biblioteca de Plex
+const getMediaType = (item: any): 'movie' | 'tv' => {
+  return item.type === 'show' ? 'tv' : 'movie';
+};
+
+interface PlexItem {
+  ratingKey: string;
+  key: string;
+  title: string;
+  year?: number;
+  thumb?: string;
+  art?: string;
+  type: string;
+  Guid?: { id: string }[];
+  guid?: string;
+}
 
 export default function LibraryScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'movies' | 'tv'>('movies');
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [movies, setMovies] = useState<any[]>([]);
-  const [tvShows, setTvShows] = useState<any[]>([]);
+  const [movies, setMovies] = useState<PlexItem[]>([]);
+  const [tvShows, setTvShows] = useState<PlexItem[]>([]);
+  const [plexBaseUrl, setPlexBaseUrl] = useState('');
+  const [plexToken, setPlexToken] = useState('');
 
   useEffect(() => {
     checkPlexAndLoad();
@@ -23,35 +67,83 @@ export default function LibraryScreen() {
       const settings = await getSettings();
       if (!settings.plexUrl || !settings.plexToken) {
         setConfigured(false);
+        setLoading(false);
         return;
       }
       setConfigured(true);
+      setPlexBaseUrl(settings.plexUrl);
+      setPlexToken(settings.plexToken);
 
-      // Cargar bibliotecas de Plex
       const libraries = await PlexService.getLibraries();
       const movieLib = libraries.find((l: any) => l.type === 'movie');
       const tvLib = libraries.find((l: any) => l.type === 'show');
 
-      if (movieLib) {
-        const moviesData = await PlexService.getLibraryContents(movieLib.key);
-        setMovies(moviesData);
-      }
-      if (tvLib) {
-        const tvData = await PlexService.getLibraryContents(tvLib.key);
-        setTvShows(tvData);
-      }
+      const [moviesData, tvData] = await Promise.all([
+        movieLib ? PlexService.getLibraryContents(movieLib.key) : Promise.resolve([]),
+        tvLib ? PlexService.getLibraryContents(tvLib.key) : Promise.resolve([]),
+      ]);
+
+      setMovies(moviesData);
+      setTvShows(tvData);
     } catch (e) {
-      // Si Plex no responde, seguimos mostrando la UI pero vacía
       console.warn('Error loading Plex library:', e);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleItemPress = async (item: PlexItem) => {
+    const mediaType = getMediaType(item);
+
+    // Intentar obtener el TMDB ID directo desde los Guids de Plex
+    let tmdbId = getTmdbIdFromGuids(item);
+
+    // Si no tiene Guid en la lista, buscar metadata detallada del ítem
+    if (!tmdbId) {
+      try {
+        const meta = await PlexService.getMediaMetadata(item.ratingKey);
+        if (meta) tmdbId = getTmdbIdFromGuids(meta);
+      } catch (_) {}
+    }
+
+    // Último fallback: buscar por título en TMDB
+    if (!tmdbId) {
+      try {
+        const searchRes = await TMDBService.search(item.title);
+        const found = searchRes.results?.find(
+          (r: any) =>
+            (r.title || r.name)?.toLowerCase() === item.title.toLowerCase()
+        );
+        if (found) tmdbId = found.id;
+      } catch (_) {}
+    }
+
+    if (tmdbId) {
+      router.push({
+        pathname: '/detail',
+        params: { id: tmdbId, mediaType },
+      });
+    } else {
+      // Si no encontramos TMDB ID, navegar igual con el título como fallback
+      router.push({
+        pathname: '/detail',
+        params: { id: item.ratingKey, mediaType, plexFallback: '1' },
+      });
+    }
+  };
+
+  const getPosterUrl = (item: PlexItem): string | null => {
+    if (!item.thumb || !plexBaseUrl || !plexToken) return null;
+    return `${plexBaseUrl}${item.thumb}?X-Plex-Token=${plexToken}`;
+  };
+
   if (loading) {
     return (
       <View style={[styles.emptyContainer, { justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.emptyText, { marginTop: theme.spacing.md }]}>
+          Cargando biblioteca de Plex...
+        </Text>
       </View>
     );
   }
@@ -75,6 +167,7 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Tabs */}
       <View style={styles.tabs}>
         <Pressable
           style={[styles.tab, activeTab === 'movies' && styles.activeTab]}
@@ -98,16 +191,38 @@ export default function LibraryScreen() {
         data={currentData}
         numColumns={3}
         keyExtractor={(item) => item.ratingKey || item.key}
-        renderItem={({ item }) => (
-          <View style={styles.gridItem}>
-            <MediaCard
-              title={item.title}
-              posterPath={null}
-              year={item.year?.toString()}
-              onPress={() => {}}
-            />
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const posterUrl = getPosterUrl(item);
+          return (
+            <Pressable
+              style={styles.gridItem}
+              onPress={() => handleItemPress(item)}
+              android_ripple={{ color: 'rgba(255,255,255,0.1)' }}
+            >
+              <View style={styles.card}>
+                {posterUrl ? (
+                  <Image
+                    source={{ uri: posterUrl }}
+                    style={styles.poster}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.posterPlaceholder}>
+                    <Text style={styles.placeholderText}>🎬</Text>
+                  </View>
+                )}
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  {item.year && (
+                    <Text style={styles.cardYear}>{item.year}</Text>
+                  )}
+                </View>
+              </View>
+            </Pressable>
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
@@ -172,6 +287,38 @@ const styles = StyleSheet.create({
   gridItem: {
     width: '33.33%',
     padding: theme.spacing.xs,
+  },
+  card: {
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.surface,
+  },
+  poster: {
+    width: '100%',
+    aspectRatio: 2 / 3,
+  },
+  posterPlaceholder: {
+    width: '100%',
+    aspectRatio: 2 / 3,
+    backgroundColor: theme.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 32,
+  },
+  cardInfo: {
+    padding: theme.spacing.sm,
+  },
+  cardTitle: {
+    color: theme.colors.text.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardYear: {
+    color: theme.colors.text.secondary,
+    fontSize: 11,
+    marginTop: 2,
   },
   listContent: {
     padding: theme.spacing.sm,
