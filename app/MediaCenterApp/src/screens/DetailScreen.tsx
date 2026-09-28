@@ -16,10 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../config/theme';
 import { TMDBService } from '../services/tmdb';
 import { SeerrService } from '../services/seerr';
+import { PlexService } from '../services/plex';
 import { LocalStorageService } from '../services/localStorage';
 import { MediaRow } from '../components/MediaRow';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { MediaItem } from '../types';
+
 
 export default function DetailScreen() {
   const { id, mediaType } = useLocalSearchParams();
@@ -57,23 +59,60 @@ export default function DetailScreen() {
         setIsFavorite(favStatus);
         if (queuedStatus) setRequestStatus('queued');
 
-        // Mostrar contenido YA (no esperar a Seerr)
+        // Mostrar contenido YA (no esperar a Seerr ni Plex)
         setLoading(false);
 
-        // FASE 2: Consultar Seerr en background sin bloquear la UI
+        // FASE 2: Consultar Seerr en background
         SeerrService.getMediaStatus(numId, mt)
-          .then((statusRes) => {
+          .then(async (statusRes) => {
             if (statusRes) setMediaInfo(statusRes);
+
             if (statusRes?.status === 5) {
               setRequestStatus('available');
             } else if (statusRes?.status === 4 || statusRes?.status === 3) {
               setRequestStatus('downloading');
             } else if (statusRes?.status === 2) {
               setRequestStatus('pending');
+            } else {
+              // FASE 3: Seerr no lo conoce → buscar directamente en Plex
+              // Esto detecta contenido que no pasó por Seerr (agregado manualmente)
+              try {
+                const title = data?.title || data?.name || '';
+                if (title) {
+                  const plexResults = await PlexService.searchLibrary(title);
+                  const found = plexResults.find((p: any) => {
+                    const plexTitle = (p.title || '').toLowerCase();
+                    const searchTitle = title.toLowerCase();
+                    return plexTitle === searchTitle || plexTitle.includes(searchTitle);
+                  });
+                  if (found) {
+                    setRequestStatus('available');
+                    setMediaInfo({ plexDirect: true, plexItem: found });
+                  } else if (!queuedStatus) {
+                    setRequestStatus('none');
+                  }
+                }
+              } catch (_) {
+                if (!queuedStatus) setRequestStatus('none');
+              }
             }
           })
-          .catch(() => {
-            if (!queuedStatus) setRequestStatus('none');
+          .catch(async () => {
+            // Seerr offline → intentar Plex directo de todas formas
+            try {
+              const title = details?.title || details?.name || '';
+              if (title) {
+                const plexResults = await PlexService.searchLibrary(title);
+                if (plexResults.length > 0) {
+                  setRequestStatus('available');
+                  setMediaInfo({ plexDirect: true });
+                } else if (!queuedStatus) {
+                  setRequestStatus('none');
+                }
+              }
+            } catch (_) {
+              if (!queuedStatus) setRequestStatus('none');
+            }
           });
 
       } catch (error) {
@@ -245,20 +284,32 @@ export default function DetailScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable
-          style={[
-            styles.primaryButton,
-            requestStatus !== 'none' && styles.buttonDisabled,
-          ]}
-          onPress={handleRequest}
-          disabled={requestStatus !== 'none' || requesting}
-        >
-          {requesting ? (
-            <ActivityIndicator color="#FFF" size="small" />
-          ) : (
-            <Text style={styles.buttonText}>{getStatusButtonText()}</Text>
-          )}
-        </Pressable>
+        {requestStatus === 'available' ? (
+          // Banner verde cuando el contenido ya está en Plex
+          <View style={styles.availableBanner}>
+            <Ionicons name="checkmark-circle" size={22} color="#22C55E" />
+            <View style={styles.availableBannerText}>
+              <Text style={styles.availableTitle}>Disponible en tu biblioteca</Text>
+              <Text style={styles.availableSubtitle}>Ya está en Plex, listo para ver</Text>
+            </View>
+          </View>
+        ) : (
+          // Botón de solicitar cuando no está disponible
+          <Pressable
+            style={[
+              styles.primaryButton,
+              requestStatus !== 'none' && styles.buttonDisabled,
+            ]}
+            onPress={handleRequest}
+            disabled={requestStatus !== 'none' || requesting}
+          >
+            {requesting ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>{getStatusButtonText()}</Text>
+            )}
+          </Pressable>
+        )}
 
         <Pressable
           style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
@@ -274,13 +325,14 @@ export default function DetailScreen() {
           </Text>
         </Pressable>
 
-        {/* Delete / Cancel button — shown only when there's an active request or content */}
+        {/* Botón eliminar — solo cuando hay contenido activo */}
         {(requestStatus === 'pending' || requestStatus === 'available' || requestStatus === 'downloading') && (
           <Pressable style={styles.deleteButton} onPress={handleDelete}>
             <Ionicons name="trash-outline" size={20} color="#FF4444" />
           </Pressable>
         )}
       </View>
+
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sinopsis</Text>
@@ -490,6 +542,31 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  availableBanner: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+    borderRadius: theme.borderRadius.sm,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  availableBannerText: {
+    flex: 1,
+  },
+  availableTitle: {
+    color: '#22C55E',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  availableSubtitle: {
+    color: 'rgba(34, 197, 94, 0.8)',
+    fontSize: 12,
+    marginTop: 2,
   },
   // Modal styles
   modalOverlay: {
