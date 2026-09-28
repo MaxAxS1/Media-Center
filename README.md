@@ -303,6 +303,13 @@ New-NetFirewallRule -DisplayName "Media Center - Bazarr"      -Direction Inbound
 ### Seerr tarda en cargar el estado de una película
 - Es normal: la app muestra la pantalla inmediatamente con los datos de TMDB y consulta el estado a Seerr en segundo plano (~600ms). El botón se actualiza solo cuando llega la respuesta.
 
+### Error en Sonarr/Radarr: "All indexers are temporarily unavailable"
+Este error ocurre cuando Prowlarr y Sonarr/Radarr pierden sincronización (generalmente porque se desactivaron indexadores en Prowlarr y quedaron "huérfanos" en Sonarr).
+**Solución:**
+1. En Prowlarr (`http://localhost:9696`), andá a **System** -> **Tasks**.
+2. Ejecutá la tarea **"Application Indexer Sync"** (ícono de recargar). Esto forzará a Prowlarr a eliminar los indexadores desactivados en Sonarr/Radarr.
+3. En Sonarr/Radarr (`Settings` -> `Indexers`), dale al botón **Test All** para limpiar cualquier estado de error temporal de los indexadores activos.
+
 ---
 
 ## 📄 Licencia
