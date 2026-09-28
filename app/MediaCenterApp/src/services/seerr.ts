@@ -59,7 +59,7 @@ export class SeerrService {
       body: JSON.stringify({
         mediaId: tmdbId,
         mediaType: 'tv',
-        ...(seasons && seasons.length > 0 ? { seasons } : {}),
+        seasons: seasons && seasons.length > 0 ? seasons : 'all',
         ...(qualityProfileId ? { profileId: qualityProfileId } : {}),
       }),
     });
